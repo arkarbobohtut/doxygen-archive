@@ -5,7 +5,7 @@ pipeline {
         stage('Checkout') {
             steps {
                 git branch: 'main',
-                    url: 'https://github.com/arkarbobohtut/grpc.git'
+                    url: 'https://github.com/rkarbobohtut/casino-number-guessing-game.git'
             }
         }
 
