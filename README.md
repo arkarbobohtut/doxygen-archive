@@ -325,7 +325,7 @@ parser-repo/
 The pipeline runs:
 
 ```
-python3 parser.py ../warnings.log
+python3 parser.py ../warnings.log warnings.csv
 ```
 
 to process the Doxygen warning log.
