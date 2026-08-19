@@ -46,7 +46,7 @@ grep -E "^INPUT *=|^OUTPUT_DIRECTORY *=|^RECURSIVE *=|^GENERATE_LATEX *=|^WARN_L
 ```
 doxygen Doxygen
 ```
-### create pythone script for parsing warrnings.log
+### create python script for parsing warrnings.log
 ```
 * use standard libraries (sys, re, csv, os).
 * use pattern for inmoring not standard lines.
