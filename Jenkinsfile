@@ -77,7 +77,7 @@ pipeline {
             steps {
                 dir('parser-repo') {
                     sh '''
-                        python3 parser.py ../warnings.log
+                        python3 parser.py ../warnings.log warnings.csv
                     '''
                 }
             }
