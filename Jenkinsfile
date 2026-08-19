@@ -36,7 +36,6 @@ pipeline {
                     sed -i 's|^OUTPUT_DIRECTORY *=.*|OUTPUT_DIRECTORY = docs|' Doxyfile
                     sed -i 's|^RECURSIVE *=.*|RECURSIVE = YES|' Doxyfile
                     sed -i 's|^GENERATE_LATEX *=.*|GENERATE_LATEX = NO|' Doxyfile
-                    grep -e "^INPUT *=|^OUTPUT_DIRECTORY *=|^RECURSIVE *=|^GENERATE_LATEX *=" Doxyfile
                 '''
             }
         }
