@@ -1,153 +1,379 @@
-# **Jenkins Doxygen Documentation Pipeline**
+# Jenkins Doxygen and Log Parser Pipeline
 
-This project uses a Jenkins Pipeline to automatically generate Doxygen documentation from the grpc source code and archive the generated documentation as a Jenkins build artifact.
+This Jenkins Pipeline generates Doxygen documentation from the gRPC source code and then uses a separate Python repository to parse the Doxygen warning log.
+
+This pipeline is an extension of the previous Doxygen pipeline.
+
+## Pipeline Flow
 
 ```
-Pipeline Flow
-Checkout Repository
-        ↓
+Checkout gRPC Repository
+        |
+        v
 Generate Doxyfile
-        ↓
+        |
+        v
 Configure Doxyfile
-        ↓
+        |
+        v
 Run Doxygen
-        ↓
-Create doc.tar.gz
-        ↓
-Archive Artifact in Jenkins
-Requirements
+        |
+        v
+Checkout Python Parser Repository
+        |
+        v
+Run Python Parser
 ```
 
-The Jenkins agent should have the following tools installed:
+## Repositories
 
-Git Doxygen tar
+### Repo A - gRPC
 
-You can check them with:
+The pipeline checks out:
+
+```
+https://github.com/arkarbobohtut/grpc.git
+```
+
+Branch:
+
+```
+master
+```
+
+This repository is used as the source code for generating Doxygen documentation.
+
+### Repo C - Python Log Parser
+
+The pipeline checks out:
+
+```
+https://github.com/arkarbobohtut/doxygen-log-parse-with-python.git
+```
+
+Branch:
+
+```
+main
+```
+
+This repository contains the Python script used to parse the Doxygen warning log.
+
+## Requirements
+
+The Jenkins agent needs the following software:
+
+- Git
+- Doxygen
+- Python 3
+
+Check the installed versions:
 
 ```
 git --version
 doxygen --version
-tar --version
-Repository
+python3 --version
 ```
 
-The pipeline checks out the following public repository:
+## Pipeline Stages
 
-https://github.com/arkarbobohtut/grpc.git
+### 1. Checkout
 
-It uses the master branch.
+The pipeline checks out the gRPC repository from GitHub.
 
-## **Pipeline Stages**
-
-### **1. Checkout**
-
-The pipeline downloads the source code from the GitHub repository.
-
+```
 stage('Checkout')
+```
+
+The repository uses the `master` branch.
 
 The Git checkout timeout is set to 60 minutes because the gRPC repository is relatively large.
 
+```
 timeout: 60
+```
 
-Tags are not downloaded because they are not required for generating the documentation.
+Tags are not downloaded because they are not required for this pipeline.
 
-### **2. Generate Doxyfile**
+---
 
-Doxygen creates a default configuration file using:
+### 2. Generate Doxyfile
 
+Doxygen generates a default configuration file:
+
+```
 doxygen -g Doxyfile
+```
 
-This creates a file named:
+This creates:
 
+```
 Doxyfile
+```
 
-### **3. Configure Doxyfile**
+in the Jenkins workspace.
 
-The pipeline changes some Doxygen settings.
+---
 
-The source directory is configured as:
+### 3. Configure Doxyfile
 
+The pipeline updates several Doxygen settings.
+
+```
 INPUT = src
+```
 
-The documentation output directory is:
+The source code is taken from the `src` directory.
 
+```
 OUTPUT_DIRECTORY = docs
+```
 
-Recursive source scanning is enabled:
+Doxygen documentation is generated under the `docs` directory.
 
+```
 RECURSIVE = YES
+```
 
-LaTeX documentation is disabled:
+Doxygen searches subdirectories recursively.
 
+```
 GENERATE_LATEX = NO
+```
 
-### **4. Run Doxygen**
+LaTeX documentation is disabled because this pipeline only needs the HTML documentation.
 
-Doxygen generates the documentation using the configured Doxyfile:
+```
+WARN_LOGFILE = warnings.log
+```
 
+Doxygen writes its warning messages to:
+
+```
+warnings.log
+```
+
+The pipeline also prints the important Doxyfile settings to the Jenkins console for verification.
+
+---
+
+### 4. Run Doxygen
+
+The pipeline runs:
+
+```
 doxygen Doxyfile
+```
 
-The generated HTML documentation will be located under:
+Doxygen generates the documentation and the warning log.
 
-docs/html/
+The workspace will contain something similar to:
 
-### **5. Create Archive**
+```
+docs/
+└── html/
+    ├── index.html
+    └── ...
 
-The generated HTML documentation is compressed into:
+warnings.log
+```
 
-doc.tar.gz
+The `warnings.log` file is important because it will be used by the Python parser in the next part of the pipeline.
 
-The command used is:
+---
 
-tar -czf doc.tar.gz -C docs html
+### 5. Checkout Repo C
 
-### **6. Archive Artifact**
+The Python parser repository is checked out into a separate directory:
 
-Finally, Jenkins archives doc.tar.gz as a build artifact:
+```
+parser-repo/
+```
 
-archiveArtifacts artifacts: 'doc.tar.gz', fingerprint: true
+The `dir('parser-repo')` block keeps the Python repository separate from the gRPC repository.
 
-After a successful build, the file can be downloaded from the Jenkins build page under Artifacts.
-
-### **Expected Workspace**
-
-After the pipeline finishes successfully, the workspace should look approximately like this:
+The workspace will look approximately like:
 
 ```
 workspace/
 ├── Doxyfile
-├── doc.tar.gz
 ├── docs/
 │   └── html/
-│       ├── index.html
-│       ├── ...
+├── warnings.log
 ├── src/
-└── ...
+└── parser-repo/
+    ├── parser.py
+    └── ...
 ```
 
-The main output of the pipeline is:
-
-doc.tar.gz
-
-### **How to Run**
+A shallow clone is used for the parser repository because the complete Git history is not required.
 
 ```
-Create a new Pipeline job in Jenkins.
-Add the Jenkinsfile to the pipeline configuration.
-Make sure the Jenkins agent has Git, Doxygen, and tar installed.
-Click Build Now.
-Wait for all pipeline stages to complete.
-Open the completed build.
-Download doc.tar.gz from the Artifacts section.
-Result
-
-The pipeline automatically:
-
-Downloads the source code.
-Creates a Doxygen configuration.
-Generates HTML documentation.
-Compresses the documentation.
-Stores the compressed file as a Jenkins artifact.
-
-This makes the Doxygen documentation available from Jenkins after each successful build.
+shallow: true
+depth: 1
 ```
+
+---
+
+### 6. Run Parser
+
+The pipeline changes into the parser repository:
+
+```
+dir('parser-repo')
+```
+
+and runs:
+
+```
+python3 parser.py ../warnings.log
+```
+
+The `../warnings.log` path is used because `warnings.log` is located one directory above the parser repository.
+
+For example:
+
+```
+workspace/
+│
+├── warnings.log
+│
+└── parser-repo/
+    └── parser.py
+```
+
+From inside `parser-repo`, the warning log is therefore:
+
+```
+../warnings.log
+```
+
+The Python parser processes the Doxygen warnings and generates its output.
+
+---
+
+## Jenkins Pipeline Configuration
+
+During development, the pipeline was first tested using:
+
+```
+Pipeline script
+```
+
+This allows the Jenkinsfile to be tested directly in the Jenkins job configuration without first committing it to Git.
+
+After the pipeline was working correctly, the Jenkinsfile was pushed to Git and tested using:
+
+```
+Pipeline script from SCM
+```
+
+This allows Jenkins to load the pipeline definition directly from the Git repository.
+
+### Development Approach
+
+The pipeline was developed in two steps:
+
+```
+1. Pipeline Script
+       |
+       v
+   Test Jenkinsfile
+       |
+       v
+   Fix issues
+       |
+       v
+2. Push Jenkinsfile to Git
+       |
+       v
+   Pipeline script from SCM
+```
+
+This approach makes it easier to test the pipeline first before moving the Jenkinsfile into source control.
+
+## Changes from the Previous Pipeline
+
+This pipeline extends the previous Doxygen pipeline with the following changes.
+
+### Added Doxygen warning log configuration
+
+The following setting was added:
+
+```
+WARN_LOGFILE = warnings.log
+```
+
+This allows the Doxygen warnings to be saved into a file.
+
+### Added Python parser repository
+
+The pipeline now checks out:
+
+```
+doxygen-log-parse-with-python
+```
+
+into:
+
+```
+parser-repo/
+```
+
+### Added Python parser execution
+
+The pipeline runs:
+
+```
+python3 parser.py ../warnings.log
+```
+
+to process the Doxygen warning log.
+
+### Removed archive stages
+
+The following stages from the previous pipeline were removed:
+
+```
+Create Archive
+Archive Artifact
+```
+
+The current pipeline focuses on generating the documentation, creating the warning log, and processing that log with the Python parser.
+
+## Expected Result
+
+After a successful build, the Jenkins workspace should contain:
+
+```
+workspace/
+├── Doxyfile
+├── docs/
+│   └── html/
+│       └── index.html
+├── warnings.log
+└── parser-repo/
+    ├── parser.py
+    └── ...
+```
+
+The main flow is:
+
+```
+gRPC Source Code
+       |
+       v
+    Doxygen
+       |
+       +----> HTML Documentation
+       |
+       +----> warnings.log
+                    |
+                    v
+             Python Parser
+                    |
+                    v
+             Parsed Result
+```
+
+This pipeline provides a simple way to automatically generate documentation and process Doxygen warnings using a separate Python parser project.
