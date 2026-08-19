@@ -1,379 +1,183 @@
-# Jenkins Doxygen and Log Parser Pipeline
-
-This Jenkins Pipeline generates Doxygen documentation from the gRPC source code and then uses a separate Python repository to parse the Doxygen warning log.
-
-This pipeline is an extension of the previous Doxygen pipeline.
-
-## Pipeline Flow
-
-```
-Checkout gRPC Repository
-        |
-        v
-Generate Doxyfile
-        |
-        v
-Configure Doxyfile
-        |
-        v
-Run Doxygen
-        |
-        v
-Checkout Python Parser Repository
-        |
-        v
-Run Python Parser
-```
-
-## Repositories
-
-### Repo A - gRPC
-
-The pipeline checks out:
-
-```
-https://github.com/arkarbobohtut/grpc.git
-```
-
-Branch:
-
-```
-master
-```
-
-This repository is used as the source code for generating Doxygen documentation.
-
-### Repo C - Python Log Parser
-
-The pipeline checks out:
-
-```
-https://github.com/arkarbobohtut/doxygen-log-parse-with-python.git
-```
-
-Branch:
-
-```
-main
-```
-
-This repository contains the Python script used to parse the Doxygen warning log.
-
-## Requirements
-
-The Jenkins agent needs the following software:
-
-- Git
-- Doxygen
-- Python 3
-
-Check the installed versions:
-
+## I tested the pipelines as bellow:
+### Check the dependencies on Jenkins Server. If needed install the require packages
 ```
 git --version
-doxygen --version
 python3 --version
+doxygen --version
+
+install doxygen
+```
+### PipelineB Testing
+```
+1. Setup PipelineB on jenkins server.
+2. Check PipelineB Status on Pipeline Overview.
+3. Check all Jenkins Stages and output of the PipelineB stages.
+4. Download doc.tar.gz Extract and check Doxygen generate index.html file.
+```
+### PipelineC testing
+```
+1. Setup PipelineC on jenkins server.
+2. Check PipelineC Status on Pipeline Overview.
+3. Check all Jenkins Stages and output of the PipelineC stages.
+4. Download warnings.csv file and check the warning output results as expect.
 ```
 
-## Pipeline Stages
-
-### 1. Checkout
-
-The pipeline checks out the gRPC repository from GitHub.
-
+## I tested the parser.py as bellow:
+### clone grpc repo
 ```
-stage('Checkout')
+git clone https://github.com/arkarbobohtut/grpc.git .
 ```
-
-The repository uses the `master` branch.
-
-The Git checkout timeout is set to 60 minutes because the gRPC repository is relatively large.
-
-```
-timeout: 60
-```
-
-Tags are not downloaded because they are not required for this pipeline.
-
----
-
-### 2. Generate Doxyfile
-
-Doxygen generates a default configuration file:
-
+### generate Doxygen file
 ```
 doxygen -g Doxyfile
 ```
-
-This creates:
-
+### configure Doxygen replace the config # add new for WARN_LOGFILE
 ```
-Doxyfile
+sed -i 's|^INPUT *=.*|INPUT = grpc/src|' Doxyfile
+sed -i 's|^OUTPUT_DIRECTORY *=.*|OUTPUT_DIRECTORY = docs|' Doxyfile
+sed -i 's|^RECURSIVE *=.*|RECURSIVE = YES|' Doxyfile
+sed -i 's|^GENERATE_LATEX *=.*|GENERATE_LATEX = NO|' Doxyfile
+sed -i 's|^WARN_LOGFILE *=.*|WARN_LOGFILE = warnings.log|' Doxyfile
+
+### check the expect result
+grep -E "^INPUT *=|^OUTPUT_DIRECTORY *=|^RECURSIVE *=|^GENERATE_LATEX *=|^WARN_LOGFILE *=" Doxyfile
 ```
-
-in the Jenkins workspace.
-
----
-
-### 3. Configure Doxyfile
-
-The pipeline updates several Doxygen settings.
-
+### generate docs with doxygen
 ```
-INPUT = src
+doxygen Doxygen
 ```
-
-The source code is taken from the `src` directory.
-
+### create pythone script for parsing warrnings.log
 ```
-OUTPUT_DIRECTORY = docs
+* use standard libraries (sys, re, csv, os).
+* use pattern for inmoring not standard lines.
+* handle for empty files and argments passing for input and output files.
 ```
-
-Doxygen documentation is generated under the `docs` directory.
-
+### run python script to parse log file
 ```
-RECURSIVE = YES
+python3 parse.py grpc/warnings.log warnings.csv
 ```
-
-Doxygen searches subdirectories recursively.
-
+### check output csv file as expected result
 ```
-GENERATE_LATEX = NO
+head -n30 grpc/warning.csv
 ```
-
-LaTeX documentation is disabled because this pipeline only needs the HTML documentation.
-
+### Check for error handling
 ```
-WARN_LOGFILE = warnings.log
+### check with empty log file
+touch empty.log && python3 parse.py empty.log empty.csv
+### check the top 10 line to meet the expected results
+head -n10 warning.csv
 ```
 
-Doxygen writes its warning messages to:
-
+## Git LFS Advantages
 ```
-warnings.log
+Git LFS is useful for storing large binary files because it keeps the actual files outside the normal Git repository while Git stores lightweight pointer files. This helps keep the Git repository smaller and makes cloning and managing repositories with large binary files more efficient.
 ```
-
-The pipeline also prints the important Doxyfile settings to the Jenkins console for verification.
-
----
-
-### 4. Run Doxygen
-
-The pipeline runs:
-
+## Adjust the repo-a to support LFS
 ```
-doxygen Doxyfile
+Git LFS can be used to manage large binary files in Repo A. First, Git LFS is installed and initialized with "git lfs install". File types such as "*.tar.gz" can then be configured with "git lfs track", which creates entries in ".gitattributes". For binary files that already exist in the repository history, "git lfs migrate import" can be used to convert them to LFS. This operation rewrites Git history, so it should be performed carefully, preferably on a dedicated fork or before the repository is shared with other developers.
+```
+## Alternative way for LFS
+```
+Git LFS is useful when large binary files need to be versioned together with the Git repository. However, there are other alternatives depending on the purpose of the file. For generated build artifacts such as doc.tar.gz, I would prefer Jenkins artifact storage or an artifact repository because these files are generated by the CI pipeline and don't need to be versioned as source code. For release binaries, GitHub Releases can also be used. For large-scale environments, object storage such as S3 or MinIO is another suitable option.
 ```
 
-Doxygen generates the documentation and the warning log.
 
-The workspace will contain something similar to:
 
+
+# My full work trough for these Tasks.
+
+## Trying to understand the following thing first
 ```
-docs/
-└── html/
-    ├── index.html
-    └── ...
-
-warnings.log
+* How does Doxygen work
+* How to parse logs with python basic dependencies
 ```
-
-The `warnings.log` file is important because it will be used by the Python parser in the next part of the pipeline.
-
----
-
-### 5. Checkout Repo C
-
-The Python parser repository is checked out into a separate directory:
-
+### install necessary packages on my local machine
 ```
-parser-repo/
+apt install doxygen
 ```
-
-The `dir('parser-repo')` block keeps the Python repository separate from the gRPC repository.
-
-The workspace will look approximately like:
-
+### Check all dependencies
 ```
-workspace/
-├── Doxyfile
-├── docs/
-│   └── html/
-├── warnings.log
-├── src/
-└── parser-repo/
-    ├── parser.py
-    └── ...
+git --version
+python3 --version
+doxygen --version
 ```
-
-A shallow clone is used for the parser repository because the complete Git history is not required.
-
+## Do manual for PipelineB
+### clone grpc repo
 ```
-shallow: true
-depth: 1
+git clone https://github.com/arkarbobohtut/grpc.git
 ```
-
----
-
-### 6. Run Parser
-
-The pipeline changes into the parser repository:
-
+### generate Doxygen file
 ```
-dir('parser-repo')
+doxygen -g Doxyfile
+```
+### configure on Doxygen replace the config
+```
+sed -i 's|^INPUT *=.*|INPUT = grpc/src|' Doxyfile
+sed -i 's|^OUTPUT_DIRECTORY *=.*|OUTPUT_DIRECTORY = docs|' Doxyfile
+sed -i 's|^RECURSIVE *=.*|RECURSIVE = YES|' Doxyfile
+sed -i 's|^GENERATE_LATEX *=.*|GENERATE_LATEX = NO|' Doxyfile
+
+### check the expect result
+grep -E '^INPUT *=|^OUTPUT_DIRECTORY *=|^RECURSIVE *=|^GENERATE_LATEX *=' Doxyfile
+```
+### generate docs with doxygen
+```
+doxygen Doxygen
+```
+### Create Archive output dir
+```
+tar -czf doc.tar.gz -C docs
 ```
 
-and runs:
-
+## try with jenkins pipelineB
 ```
-python3 parser.py ../warnings.log
-```
-
-The `../warnings.log` path is used because `warnings.log` is located one directory above the parser repository.
-
-For example:
-
-```
-workspace/
-│
-├── warnings.log
-│
-└── parser-repo/
-    └── parser.py
+* test pipeline for only checkout the repo and add extensions for timeout. #Timeout value need to adjust for large project.
+* install doxygen on jenkin master node.
+* try first with pipeline script. After it's work, push to git and test with scm pipeline script.
 ```
 
-From inside `parser-repo`, the warning log is therefore:
-
+## Do manual for PipelineC
+### clone grpc repo
 ```
-../warnings.log
+git clone https://github.com/arkarbobohtut/grpc.git
 ```
-
-The Python parser processes the Doxygen warnings and generates its output.
-
----
-
-## Jenkins Pipeline Configuration
-
-During development, the pipeline was first tested using:
-
+### generate Doxygen file
 ```
-Pipeline script
+doxygen -g Doxyfile
 ```
-
-This allows the Jenkinsfile to be tested directly in the Jenkins job configuration without first committing it to Git.
-
-After the pipeline was working correctly, the Jenkinsfile was pushed to Git and tested using:
-
+### configure Doxygen replace the config # add new for WARN_LOGFILE
 ```
-Pipeline script from SCM
+sed -i 's|^INPUT *=.*|INPUT = grpc/src|' Doxyfile
+sed -i 's|^OUTPUT_DIRECTORY *=.*|OUTPUT_DIRECTORY = docs|' Doxyfile
+sed -i 's|^RECURSIVE *=.*|RECURSIVE = YES|' Doxyfile
+sed -i 's|^GENERATE_LATEX *=.*|GENERATE_LATEX = NO|' Doxyfile
+sed -i 's|^WARN_LOGFILE *=.*|WARN_LOGFILE = warnings.log|' Doxyfile
+
+### check the expect result
+grep -e "^INPUT *=.*\|^OUTPUT_DIRECTORY *=.*\|^RECURSIVE *=.*\|^GENERATE_LATEX *=.*\|^WARN_LOGFILE *=.*" Doxyfile
 ```
-
-This allows Jenkins to load the pipeline definition directly from the Git repository.
-
-### Development Approach
-
-The pipeline was developed in two steps:
-
+### generate docs with doxygen
 ```
-1. Pipeline Script
-       |
-       v
-   Test Jenkinsfile
-       |
-       v
-   Fix issues
-       |
-       v
-2. Push Jenkinsfile to Git
-       |
-       v
-   Pipeline script from SCM
+doxygen Doxygen
+```
+### create pythone script for parsing warrnings.log
+```
+* use standard libraries (sys, re, csv, os).
+* use pattern for inmoring not standard lines.
+* handle for empty files and argments passing for input and output files.
+```
+### run python script to parse log file
+```
+python3 parse.py grpc/warnings.log warnings.csv
+```
+### check output csv file as expected result
+```
+head -n30 grpc/warning.csv
 ```
 
-This approach makes it easier to test the pipeline first before moving the Jenkinsfile into source control.
-
-## Changes from the Previous Pipeline
-
-This pipeline extends the previous Doxygen pipeline with the following changes.
-
-### Added Doxygen warning log configuration
-
-The following setting was added:
-
+## try with jenkins pipelineC
 ```
-WARN_LOGFILE = warnings.log
+* Add new config for warnings.log
+* delete Create Archive and Archive Artifact stages
+* try first with pipeline script. After it's work, push to git and test with scm pipeline script.
 ```
-
-This allows the Doxygen warnings to be saved into a file.
-
-### Added Python parser repository
-
-The pipeline now checks out:
-
-```
-doxygen-log-parse-with-python
-```
-
-into:
-
-```
-parser-repo/
-```
-
-### Added Python parser execution
-
-The pipeline runs:
-
-```
-python3 parser.py ../warnings.log warnings.csv
-```
-
-to process the Doxygen warning log.
-
-### Removed archive stages
-
-The following stages from the previous pipeline were removed:
-
-```
-Create Archive
-Archive Artifact
-```
-
-The current pipeline focuses on generating the documentation, creating the warning log, and processing that log with the Python parser.
-
-## Expected Result
-
-After a successful build, the Jenkins workspace should contain:
-
-```
-workspace/
-├── Doxyfile
-├── docs/
-│   └── html/
-│       └── index.html
-├── warnings.log
-└── parser-repo/
-    ├── parser.py
-    └── ...
-```
-
-The main flow is:
-
-```
-gRPC Source Code
-       |
-       v
-    Doxygen
-       |
-       +----> HTML Documentation
-       |
-       +----> warnings.log
-                    |
-                    v
-             Python Parser
-                    |
-                    v
-             Parsed Result
-```
-
-This pipeline provides a simple way to automatically generate documentation and process Doxygen warnings using a separate Python parser project.
