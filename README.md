@@ -73,6 +73,7 @@ head -n10 warning.csv
 Git LFS is useful for storing large binary files because it keeps the actual files outside the normal Git repository while Git stores lightweight pointer files. This helps keep the Git repository smaller and makes cloning and managing repositories with large binary files more efficient.
 ```
 ## Adjust the repo-a to support LFS
+https://github.com/git-lfs/git-lfs
 ```
 Git LFS can be used to manage large binary files in Repo A. First, Git LFS is installed and initialized with "git lfs install". File types such as "*.tar.gz" can then be configured with "git lfs track", which creates entries in ".gitattributes". For binary files that already exist in the repository history, "git lfs migrate import" can be used to convert them to LFS. This operation rewrites Git history, so it should be performed carefully, preferably on a dedicated fork or before the repository is shared with other developers.
 ```
